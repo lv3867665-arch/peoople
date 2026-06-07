@@ -1,0 +1,2107 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeOople Hub - Painel Administrativo</title>
+    <script>
+        // Define --vh como 1% da altura real visível (desconta barra do browser)
+        function setVh() { document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px'); }
+        setVh();
+        window.addEventListener('resize', setVh);
+    </script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root { --peoople-purple: #6b21a8; }
+        body { background-color: #f8fafc; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
+        .sidebar { width: 380px; border-right: 1px solid #e2e8f0; background: white; display: flex; flex-direction: column; height: 100vh; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; height: 100vh; background: #f1f5f9; position: relative; }
+        .message-bubble { max-width: 100%; min-width: 80px; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; font-size: 14.5px; line-height: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .message-sent { background-color: #6b21a8; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .message-received { background-color: white; color: #1e293b; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .peoople-logo { color: #6b21a8; font-weight: 800; font-size: 26px; letter-spacing: -1px; }
+        .tag-badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; margin-right: 4px; display: inline-block; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .active-tab-btn { background-color: #6b21a8 !important; color: white !important; }
+        .optimistic-pending { opacity: 0.6; }
+        .loading-shimmer { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .color-picker { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
+        .color-picker:hover { transform: scale(1.1); }
+        .color-picker.selected { border-color: #6b21a8; box-shadow: 0 0 0 2px white, 0 0 0 4px #6b21a8; }
+        .message-failed { background-color: #fee2e2 !important; color: #7f1d1d !important; border: 1px solid #fca5a5 !important; }
+        .msg-row { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 4px; }
+        .msg-row.sent { flex-direction: row-reverse; }
+        .msg-row.received { flex-direction: row; }
+        .reply-btn { opacity: 0; transition: opacity 0.15s; background: white; border: 1px solid #e2e8f0; border-radius: 50%; width: 28px; height: 28px; min-width: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.1); color: #64748b; flex-shrink: 0; align-self: center; }
+        .msg-row:hover .reply-btn { opacity: 1; }
+        .reply-btn:hover { color: #6b21a8; border-color: #6b21a8; }
+        .emoji-picker-panel { position: absolute; bottom: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 16px 16px 0 0; padding: 10px 12px; box-shadow: 0 -4px 20px rgba(0,0,0,0.12); z-index: 50; max-height: 240px; overflow-y: auto; }
+        .emoji-picker-panel::-webkit-scrollbar { width: 4px; }
+        .emoji-picker-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; }
+        .emoji-btn { font-size: 21px; padding: 4px 2px; cursor: pointer; border-radius: 6px; border: none; background: transparent; line-height: 1.2; text-align: center; transition: background 0.1s; }
+        .emoji-btn:hover { background: #f1f5f9; }
+        .chat-composer { position: relative; }
+        .reaction-picker { position: absolute; display: flex; gap: 2px; background: white; border: 1px solid #e2e8f0; border-radius: 24px; padding: 5px 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); z-index: 20; bottom: calc(100% + 6px); white-space: nowrap; }
+        .reaction-emoji-btn { font-size: 20px; cursor: pointer; border: none; background: transparent; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; transition: transform 0.15s, background 0.1s; }
+        .reaction-emoji-btn:hover { transform: scale(1.35); background: #f1f5f9; }
+        .reaction-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 5px; border-radius: 12px; font-size: 13px; cursor: pointer; border: 1px solid #e2e8f0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; line-height: 1.4; }
+        .reaction-badge:hover { border-color: #6b21a8; background: #f5f3ff; }
+        .reaction-badge.my-reaction { background: #f5f3ff; border-color: #c4b5fd; }
+
+        /* ── Mobile ─────────────────────────────────────────── */
+        .mobile-back-btn { display: none; }
+
+        @media (max-width: 767px) {
+            /* Corrige h-screen para usar a altura real visível */
+            body > #root > * { height: calc(var(--vh, 1vh) * 100) !important; }
+
+            /* Nav lateral vira barra inferior fixa */
+            .nav-sidebar {
+                position: fixed !important;
+                bottom: 0 !important; left: 0 !important; right: 0 !important;
+                width: 100vw !important; height: 58px !important;
+                flex-direction: row !important;
+                padding: 0 4px !important;
+                align-items: center !important;
+                justify-content: space-around !important;
+                gap: 0 !important;
+                z-index: 100 !important;
+            }
+            .nav-logo { display: none !important; }
+            .nav-config-btn { margin-top: 0 !important; }
+
+            /* Área de conteúdo: altura exata = tela visível menos nav */
+            .main-content-wrap {
+                width: 100vw !important;
+                height: calc(var(--vh, 1vh) * 100 - 58px) !important;
+                padding-bottom: 0 !important;
+                overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            /* ChatView root: precisa preencher o main-content-wrap */
+            .main-content-wrap > div {
+                height: 100% !important;
+                min-height: 0 !important;
+            }
+
+            /* Lista e chat preenchem 100% do container pai */
+            .sidebar { width: 100vw !important; height: 100% !important; min-height: 0 !important; }
+            .chat-area {
+                width: 100vw !important;
+                height: 100% !important;
+                min-height: 0 !important;
+                max-width: 100vw !important;
+                overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            body.mobile-composer-focused .nav-sidebar {
+                display: none !important;
+            }
+
+            body.mobile-composer-focused .main-content-wrap {
+                height: calc(var(--vh, 1vh) * 100) !important;
+            }
+
+            /* Header do chat: nunca encolhe */
+            .chat-area > div:first-child {
+                flex-shrink: 0 !important;
+                position: sticky !important;
+                top: 0 !important;
+                z-index: 10 !important;
+                padding: 10px 12px !important;
+            }
+
+            .chat-area > div:first-child > div {
+                min-width: 0 !important;
+            }
+
+            .chat-area > div:first-child .font-bold,
+            .chat-area > div:first-child .text-xs {
+                max-width: 48vw !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+            }
+
+            /* Área de mensagens: ocupa o espaço restante sem vazar */
+            .chat-area .messages-scroll {
+                flex: 1 1 0% !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+                padding: 12px 10px !important;
+            }
+
+            /* Input bar: nunca encolhe */
+            .chat-area > div:last-child {
+                flex-shrink: 0 !important;
+            }
+
+            .chat-composer {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                overflow: hidden !important;
+                padding: 10px 8px calc(10px + env(safe-area-inset-bottom)) !important;
+                box-sizing: border-box !important;
+            }
+
+            .mobile-hidden { display: none !important; }
+
+            /* Botão voltar aparece só no mobile */
+            .mobile-back-btn { display: flex !important; }
+
+            /* Bolhas de mensagem podem ser um pouco mais largas */
+            .msg-row {
+                max-width: 100% !important;
+                gap: 4px !important;
+            }
+
+            .message-bubble {
+                max-width: calc(100vw - 70px) !important;
+                font-size: 14px !important;
+                line-height: 19px !important;
+                word-break: break-word !important;
+            }
+
+            .reply-btn {
+                opacity: 1 !important;
+                width: 26px !important;
+                height: 26px !important;
+                min-width: 26px !important;
+            }
+
+            /* Input de texto menor para caber na tela */
+            .chat-input-row {
+                display: grid !important;
+                grid-template-columns: 36px 36px 36px 36px 36px minmax(0, 1fr) 42px !important;
+                align-items: center !important;
+                gap: 5px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            .chat-input-row button {
+                width: 36px !important;
+                height: 36px !important;
+                min-width: 36px !important;
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+
+            .chat-input-row button:last-child {
+                width: 42px !important;
+                height: 42px !important;
+                min-width: 42px !important;
+            }
+
+            .chat-input-row input[type="text"] {
+                min-width: 0 !important;
+                width: 100% !important;
+                height: 42px !important;
+                box-sizing: border-box !important;
+                padding: 0 12px !important;
+                font-size: 16px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback, useMemo, memo, Component } = React;
+        const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+
+        const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
+
+        const EMOJIS = [
+            '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','😘','😚','😋','😛','😜','🤪',
+            '😝','🤑','🤗','🤔','😐','😑','😶','😏','😒','🙄','😬','😌','😔','😢','😭','😤','😡','🤬','😈','💩',
+            '❤️','🧡','💛','💚','💙','💜','🖤','💔','💕','💞','💓','💗','💖','💘','💝','🔥','✨','⭐','🌟','💫',
+            '👍','👎','✊','👊','🤛','🤜','👏','🙌','🤝','🙏','💪','👋','✌️','🤞','👌','🤙','☝️','👈','👉','👆',
+            '🎉','🎊','🎈','🎁','🏆','🥇','🎯','🎮','🎲','🎵','🎶','🎤','📸','📱','💻','⚽','🏀','🎾','🎸','🥳',
+            '🍎','🍊','🍋','🍇','🍓','🍒','🍕','🍔','🍟','🌮','🌯','🍣','☕','🍺','🥂','🍷','🍹','🧃','💧','🧁',
+            '🌹','🌷','🌸','🌺','🌼','🌻','🍀','🌿','🌵','🌴','🌲','🌳','🦋','🐝','🌈','🌊','⚡','❄️','☀️','🌙',
+            '🐶','🐱','🐭','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🦆','🦉','🐢',
+            '🚗','🚀','✈️','🚢','🚂','🏠','🏖','🏔','🌍','🌅','🌃','🌉','🎭','💎','🔑','📝','📖','🔍','📢','💬',
+            '😷','🤒','🤕','😴','🥱','😪','🤧','🥴','😵','🤯','🥸','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️',
+        ];
+
+        // Traduz erros da Meta para português
+        const META_ERROR_CODES = {
+            131047: 'Janela de 24h expirada. Use um template para recontatar o cliente.',
+            131026: 'Mensagem não entregue. Verifique se o número está ativo no WhatsApp.',
+            130472: 'Número do destinatário está em um experimento da Meta.',
+            131000: 'Algo deu errado no servidor da Meta. Tente novamente.',
+            131005: 'Acesso negado. Verifique as permissões da conta.',
+            131008: 'Parâmetro obrigatório ausente na requisição.',
+            131009: 'Valor de parâmetro inválido.',
+            131016: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+            131021: 'Número do remetente e destinatário são iguais.',
+            131031: 'Conta bloqueada pela Meta.',
+            131048: 'Muitas mensagens enviadas para este número (spam). Aguarde antes de tentar novamente.',
+            131051: 'Tipo de mensagem não suportado.',
+            131052: 'Erro ao baixar a mídia. Verifique o arquivo.',
+            131053: 'Erro ao enviar a mídia para a Meta.',
+            132000: 'Número de parâmetros do template não corresponde.',
+            132001: 'Template não encontrado. Verifique o nome e idioma.',
+            132005: 'Idioma do template não suportado.',
+            132007: 'Template viola a política de formatação da Meta.',
+            132008: 'Template pausado pela Meta.',
+            132009: 'Template rejeitado pela Meta.',
+            132012: 'Template com parâmetros de formato inválidos.',
+            133000: 'Descadastramento incompleto. Registre o número novamente.',
+            133004: 'Servidor da Meta temporariamente indisponível.',
+            133005: 'PIN de verificação em duas etapas incorreto.',
+            133006: 'Número precisa ser verificado antes do uso.',
+            133007: 'Conta bloqueada pela Meta.',
+            133008: 'Muitas tentativas do PIN de verificação em duas etapas.',
+            135000: 'Erro genérico do usuário.',
+            136000: 'Erro genérico da empresa.',
+        };
+
+        const META_ERROR_TITLES = {
+            'Re-engagement message': 'Janela de 24h expirada. Use um template para recontatar.',
+            'Message Undeliverable': 'Mensagem não entregue.',
+            'Sender and recipient phone number is the same': 'Remetente e destinatário são o mesmo número.',
+            'Unsupported message type': 'Tipo de mensagem não suportado.',
+            'Media download error': 'Erro ao baixar mídia.',
+            'Media upload error': 'Erro ao enviar mídia.',
+            'Something went wrong': 'Algo deu errado no servidor da Meta.',
+            'Too many messages': 'Muitas mensagens enviadas. Aguarde antes de tentar novamente.',
+            'Account blocked': 'Conta bloqueada pela Meta.',
+            'Template does not exist': 'Template não encontrado.',
+            'Template in paused state': 'Template pausado pela Meta.',
+            'Template rejected': 'Template rejeitado pela Meta.',
+            'Server is temporarily unavailable': 'Servidor da Meta temporariamente indisponível.',
+            'Access denied': 'Acesso negado. Verifique as permissões.',
+            'Required parameter is missing': 'Parâmetro obrigatório ausente.',
+            'Parameter value is not valid': 'Valor de parâmetro inválido.',
+        };
+
+        function translateMetaError(errorText) {
+            if (!errorText) return errorText;
+            // Formato: [código] título — detalhe
+            const codeMatch = errorText.match(/^\[(\d+)\]/);
+            if (codeMatch) {
+                const code = parseInt(codeMatch[1]);
+                if (META_ERROR_CODES[code]) {
+                    return `Erro ${code}: ${META_ERROR_CODES[code]}`;
+                }
+            }
+            // Tenta traduzir pelo título
+            for (const [en, pt] of Object.entries(META_ERROR_TITLES)) {
+                if (errorText.toLowerCase().includes(en.toLowerCase())) {
+                    const codePrefix = codeMatch ? `Erro ${codeMatch[1]}: ` : '';
+                    return `${codePrefix}${pt}`;
+                }
+            }
+            return errorText;
+        }
+
+        // Comprime imagem no browser antes de enviar (reduz 5-20x o tamanho)
+        const processFile = (file) => new Promise(resolve => {
+            if (!file.type.startsWith('image/')) {
+                // Não é imagem: só lê como base64 sem processar
+                const r = new FileReader();
+                r.onload = ev => resolve({ name: file.name, type: file.type, data: ev.target.result });
+                r.readAsDataURL(file);
+                return;
+            }
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                const MAX = 1280;
+                let { width, height } = img;
+                if (width > MAX || height > MAX) {
+                    if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+                    else { width = Math.round(width * MAX / height); height = MAX; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = height;
+                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                const data = canvas.toDataURL('image/jpeg', 0.82);
+                resolve({ name: file.name.replace(/\.[^.]+$/, '.jpg'), type: 'image/jpeg', data });
+            };
+            img.onerror = () => {
+                // Fallback: lê sem compressão
+                const r = new FileReader();
+                r.onload = ev => resolve({ name: file.name, type: file.type, data: ev.target.result });
+                r.readAsDataURL(file);
+            };
+            img.src = url;
+        });
+
+        // ============================================
+        // ERROR BOUNDARY
+        // ============================================
+        class ErrorBoundary extends Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                console.error('React Error:', error, errorInfo);
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="flex h-screen items-center justify-center bg-slate-100">
+                            <div className="bg-red-50 p-8 rounded-2xl border border-red-200 text-center max-w-md">
+                                <i className="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                                <h2 className="text-red-600 font-bold mb-2">Erro ao carregar</h2>
+                                <p className="text-red-500 text-sm mb-4">{this.state.error?.message || 'Erro desconhecido'}</p>
+                                <button 
+                                    onClick={() => window.location.reload()} 
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                                >
+                                    Recarregar Página
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // ============================================
+        // LOADING SCREEN
+        // ============================================
+        const LoadingScreen = () => (
+            <div className="flex h-screen items-center justify-center bg-slate-100">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4 mx-auto"></div>
+                    <p className="text-slate-500 font-medium">Carregando PeOople Hub...</p>
+                </div>
+            </div>
+        );
+
+        const PRESET_COLORS = [
+            '#22c55e', '#16a34a', '#15803d', '#3b82f6', '#2563eb', '#1d4ed8',
+            '#8b5cf6', '#7c3aed', '#6d28d9', '#f59e0b', '#d97706', '#b45309',
+            '#ef4444', '#dc2626', '#b91c1c', '#ec4899', '#db2777', '#be185d',
+            '#14b8a6', '#0d9488', '#0f766e', '#64748b', '#475569', '#334155',
+            '#f97316', '#ea580c', '#c2410c', '#06b6d4', '#0891b2', '#0e7490',
+        ];
+
+        const WindowTimer = memo(({ lastReceived }) => {
+            const [t, setT] = useState(''); 
+            const [exp, setExp] = useState(false);
+            
+            useEffect(() => {
+                if (!lastReceived) return;
+                const upd = () => {
+                    const d = (new Date(lastReceived).getTime() + 86400000) - Date.now();
+                    if (d <= 0) { setT('Expirada'); setExp(true); }
+                    else { 
+                        const hours = Math.floor(d/3600000);
+                        const minutes = Math.floor((d%3600000)/60000);
+                        setT(`${hours}h ${minutes}m`); 
+                        setExp(false); 
+                    }
+                };
+                upd(); 
+                const i = setInterval(upd, 60000); 
+                return () => clearInterval(i);
+            }, [lastReceived]);
+            
+            if (!lastReceived) return null;
+            return (
+                <div className={`text-[10px] font-black px-2 py-0.5 rounded border ${exp ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                    {t}
+                </div>
+            );
+        });
+
+        const ChatView = memo(({ conversations, selectedPhone, setSelectedPhone, config, templates, quickReplies, socket, setConversations, unreadCounts }) => {
+            const [messages, setMessages] = useState([]);
+            const [inputText, setInputText] = useState('');
+            const [isSending, setIsSending] = useState(false);
+            const [isLoading, setIsLoading] = useState(false);
+            const [showTpl, setShowTpl] = useState(false);
+            const [showQr, setShowQr] = useState(false);
+            const [file, setFile] = useState(null);
+            const [error, setError] = useState(null);
+            const [pendingTpl, setPendingTpl] = useState(null);
+            const [replyTo, setReplyTo] = useState(null);
+            const [hasMore, setHasMore] = useState(false);
+            const [isLoadingMore, setIsLoadingMore] = useState(false);
+            const [showSearch, setShowSearch] = useState(false);
+            const [searchText, setSearchText] = useState('');
+            const searchInputRef = useRef(null);
+            const [mobileShowChat, setMobileShowChat] = useState(false);
+            const [isSendingLocation, setIsSendingLocation] = useState(false);
+            const [showEmoji, setShowEmoji] = useState(false);
+            const emojiRef = useRef(null);
+            const [reactions, setReactions] = useState({});
+            const [reactionTarget, setReactionTarget] = useState(null);
+
+            // Quando abre o chat no mobile, empurra um estado no histórico
+            // para que o botão físico "voltar" feche o chat em vez de sair da página
+            useEffect(() => {
+                if (mobileShowChat) {
+                    window.history.pushState({ mobileChatOpen: true }, '');
+                }
+            }, [mobileShowChat]);
+
+            useEffect(() => {
+                const onPopState = (e) => {
+                    if (mobileShowChat) {
+                        setMobileShowChat(false);
+                    }
+                };
+                window.addEventListener('popstate', onPopState);
+                return () => window.removeEventListener('popstate', onPopState);
+            }, [mobileShowChat]);
+            
+            const endRef = useRef(null);
+            const scrollRef = useRef(null);
+            const inputRef = useRef(null);
+            const isBottom = useRef(true);
+            const fInput = useRef(null);
+            const audio = useRef(null);
+
+            useEffect(() => {
+                if (typeof window !== 'undefined') {
+                    audio.current = new Audio(NOTIFICATION_SOUND);
+                    audio.current.volume = 0.5;
+                }
+            }, []);
+
+            useEffect(() => {
+                if (!showEmoji) return;
+                const handler = (e) => {
+                    if (emojiRef.current && !emojiRef.current.contains(e.target)) {
+                        setShowEmoji(false);
+                    }
+                };
+                document.addEventListener('mousedown', handler);
+                return () => document.removeEventListener('mousedown', handler);
+            }, [showEmoji]);
+
+            const toggleReaction = useCallback((msgId, emoji) => {
+                setReactions(prev => {
+                    const msgR = prev[msgId] || {};
+                    const cur = msgR[emoji] || 0;
+                    return { ...prev, [msgId]: { ...msgR, [emoji]: cur > 0 ? 0 : 1 } };
+                });
+                setReactionTarget(null);
+            }, []);
+
+            useEffect(() => {
+                if (!reactionTarget) return;
+                const handler = (e) => {
+                    if (!e.target.closest('.reaction-picker') && !e.target.closest('.msg-reaction-trigger')) {
+                        setReactionTarget(null);
+                    }
+                };
+                document.addEventListener('mousedown', handler);
+                return () => document.removeEventListener('mousedown', handler);
+            }, [reactionTarget]);
+
+            const insertEmoji = useCallback((emoji) => {
+                const input = inputRef.current;
+                if (!input) { setInputText(prev => prev + emoji); return; }
+                const start = input.selectionStart ?? inputText.length;
+                const end = input.selectionEnd ?? inputText.length;
+                const newText = inputText.substring(0, start) + emoji + inputText.substring(end);
+                setInputText(newText);
+                setTimeout(() => {
+                    input.focus();
+                    const pos = start + emoji.length;
+                    input.setSelectionRange(pos, pos);
+                }, 0);
+            }, [inputText]);
+
+            // Tenta achar nas conversas; se não achar, cria um contato mínimo com o próprio telefone
+            const contact = useMemo(() => {
+                if (!selectedPhone) return null;
+                const found = (conversations || []).find(c => c.phone === selectedPhone);
+                if (found) return found;
+                // Lead adicionado manualmente que ainda não tem histórico de mensagens
+                return { phone: selectedPhone, name: selectedPhone, lastMessage: '', tags: [] };
+            }, [conversations, selectedPhone]);
+
+            // Filtra conversas pelo texto de busca
+            const filteredConversations = useMemo(() => {
+                if (!searchText.trim()) return conversations || [];
+                const q = searchText.trim().toLowerCase();
+                return (conversations || []).filter(c =>
+                    (c.name || '').toLowerCase().includes(q) ||
+                    (c.phone || '').includes(q)
+                );
+            }, [conversations, searchText]);
+
+            // Foca no campo de busca ao abrir
+            useEffect(() => {
+                if (showSearch && searchInputRef.current) {
+                    setTimeout(() => searchInputRef.current?.focus(), 50);
+                }
+            }, [showSearch]);
+
+            useEffect(() => {
+                if (!selectedPhone) return;
+                
+                let isMounted = true;
+                setMessages([]); 
+                setIsLoading(true);
+                setHasMore(false);
+                setError(null);
+                setReplyTo(null);
+                
+                if (socket && socket.connected) {
+                    socket.emit('joinChat', selectedPhone);
+                }
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+                
+                fetch(`/api/messages/${encodeURIComponent(selectedPhone)}?limit=50`, {
+                    signal: controller.signal
+                })
+                    .then(res => {
+                        clearTimeout(timeoutId);
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (!isMounted) return;
+                        const msgs = Array.isArray(data) ? data : [];
+                        setMessages(msgs);
+                        setHasMore(msgs.length >= 50);
+                        setIsLoading(false);
+                        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "auto" }), 100);
+
+                        // Carrega mídia das mensagens em lotes — imediatamente para as últimas 5,
+                        // e com delay de 12s para as demais (dá tempo do background download terminar)
+                        const mediaMessages = msgs.filter(m => m.hasMedia);
+                        if (mediaMessages.length > 0 && isMounted) {
+                            const loadMedia = async (batch, delay) => {
+                                if (delay) await new Promise(r => setTimeout(r, delay));
+                                if (!isMounted) return;
+                                for (const pm of batch) {
+                                    try {
+                                        const r = await fetch(`/api/messages/media/${pm._id}`);
+                                        if (!r.ok) continue;
+                                        const d = await r.json();
+                                        if (d.mediaData && isMounted) {
+                                            setMessages(prev => prev.map(m =>
+                                                String(m._id) === String(pm._id) ? { ...m, mediaData: d.mediaData } : m
+                                            ));
+                                        }
+                                    } catch (e) {}
+                                }
+                            };
+                            // últimas 5 mensagens com mídia: carrega imediatamente (mais visíveis)
+                            const recent = mediaMessages.slice(-5);
+                            const older = mediaMessages.slice(0, -5);
+                            loadMedia(recent, 0);
+                            if (older.length > 0) loadMedia(older, 500);
+                        }
+                    })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        if (!isMounted) return;
+                        console.error('Erro carregando mensagens:', err);
+                        setError(err.name === 'AbortError' ? 'Timeout ao carregar' : err.message);
+                        setIsLoading(false);
+                    });
+                    
+                return () => { 
+                    isMounted = false; 
+                    controller.abort();
+                };
+            }, [selectedPhone, socket]);
+
+            useEffect(() => {
+                if (!socket || !selectedPhone) return;
+                
+                const hNew = (msg) => {
+                    if (msg.phone !== selectedPhone) return;
+                    if (msg.direction === 'received' && audio.current) {
+                        audio.current.play().catch(() => {});
+                    }
+                    setMessages(prev => {
+                        if (prev.find(m => m.wamid === msg.wamid)) return prev;
+                        return [...prev.filter(m => !(m.isOptimistic && m.text === msg.text)), msg];
+                    });
+                    if (isBottom.current) {
+                        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+                    }
+                };
+                
+                const hStatus = (d) => {
+                    setMessages(prev => prev.map(m => {
+                        if (m.wamid !== d.wamid) return m;
+                        const upd = { ...m, status: d.status };
+                        if (d.error) upd.error = d.error;
+                        return upd;
+                    }));
+                };
+
+                // Atualiza a mídia quando o servidor terminar o download (sem travar a mensagem)
+                const hMedia = (d) => {
+                    setMessages(prev => prev.map(m => String(m._id) === String(d._id) ? { ...m, mediaData: d.mediaData } : m));
+                };
+                
+                socket.on('newMessage', hNew); 
+                socket.on('statusUpdate', hStatus);
+                socket.on('mediaUpdate', hMedia);
+                
+                return () => { 
+                    socket.off('newMessage', hNew); 
+                    socket.off('statusUpdate', hStatus);
+                    socket.off('mediaUpdate', hMedia);
+                };
+            }, [socket, selectedPhone]);
+
+            const loadMoreMessages = useCallback(async () => {
+                if (isLoadingMore || !hasMore || !selectedPhone || messages.length === 0) return;
+                setIsLoadingMore(true);
+                const oldest = messages[0];
+                try {
+                    const res = await fetch(`/api/messages/${encodeURIComponent(selectedPhone)}?limit=50&before=${encodeURIComponent(oldest.timestamp)}`);
+                    if (!res.ok) throw new Error();
+                    const older = await res.json();
+                    if (older.length < 50) setHasMore(false);
+                    if (older.length === 0) { setIsLoadingMore(false); return; }
+                    const scrollEl = scrollRef.current;
+                    const prevHeight = scrollEl?.scrollHeight || 0;
+                    setMessages(prev => [...older, ...prev]);
+                    requestAnimationFrame(() => {
+                        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight;
+                    });
+                    const mediaOlder = older.filter(m => m.hasMedia);
+                    if (mediaOlder.length > 0) {
+                        for (const pm of mediaOlder) {
+                            try {
+                                const r = await fetch(`/api/messages/media/${pm._id}`);
+                                if (!r.ok) continue;
+                                const d = await r.json();
+                                if (d.mediaData) setMessages(prev => prev.map(m => String(m._id) === String(pm._id) ? { ...m, mediaData: d.mediaData } : m));
+                            } catch {}
+                        }
+                    }
+                } catch {}
+                setIsLoadingMore(false);
+            }, [isLoadingMore, hasMore, selectedPhone, messages]);
+
+            const handleScroll = useCallback((e) => {
+                const el = e.target;
+                isBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+                if (el.scrollTop < 80 && hasMore && !isLoadingMore) {
+                    loadMoreMessages();
+                }
+            }, [hasMore, isLoadingMore, loadMoreMessages]);
+
+            const send = async (tpl = null, qr = null) => {
+                if (isSending || (!inputText && !file && !tpl && !qr)) return;
+                
+                if (tpl?.components?.some(c => c.type === 'HEADER' && c.format === 'IMAGE') && !file) { 
+                    setPendingTpl(tpl);
+                    setShowTpl(false); 
+                    fInput.current?.click(); 
+                    return; 
+                }
+                
+                setIsSending(true);
+                const txt = qr ? qr.text : (tpl ? (tpl.components?.find(c=>c.type==='BODY')?.text || `Template: ${tpl.name}`) : inputText);
+                const optId = 'opt-' + Date.now();
+                
+                const optimisticMsg = { 
+                    _id: optId, 
+                    phone: selectedPhone, 
+                    text: txt, 
+                    direction: 'sent', 
+                    timestamp: new Date().toISOString(), 
+                    status: 'pending', 
+                    isOptimistic: true 
+                };
+                
+                const currentReplyTo = replyTo;
+                setMessages(prev => [...prev, optimisticMsg]);
+                setInputText('');
+                setFile(null);
+                setShowTpl(false);
+                setShowQr(false);
+                setReplyTo(null);
+                
+                requestAnimationFrame(() => {
+                    endRef.current?.scrollIntoView({ behavior: "smooth" });
+                });
+
+                fetch('/api/messages/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        phone: selectedPhone, 
+                        messageText: qr ? qr.text : (tpl ? (tpl.components?.find(c=>c.type==='BODY')?.text || tpl.name) : txt), 
+                        templateName: tpl?.name,
+                        languageCode: tpl?.language || undefined,
+                        mediaData: qr?.mediaData || file?.data,
+                        mediaType: qr?.mediaType || file?.type,
+                        fileName: qr?.mediaName || file?.name,
+                        replyToWamid: currentReplyTo?.wamid || undefined
+                    })
+                })
+                .then(async (res) => {
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || `HTTP ${res.status}`);
+                    }
+                })
+                .catch((err) => {
+                    console.error('Erro envio:', err);
+                    setMessages(prev => prev.map(m => 
+                        m._id === optId ? { ...m, status: 'failed', error: err.message } : m
+                    ));
+                })
+                .finally(() => {
+                    setIsSending(false);
+                    setTimeout(() => inputRef.current?.focus(), 150);
+                });
+            };
+
+            const sendLocation = useCallback(() => {
+                if (isSendingLocation || !selectedPhone) return;
+                if (!navigator.geolocation) {
+                    alert('Seu navegador não suporta geolocalização.');
+                    return;
+                }
+                setIsSendingLocation(true);
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        const { latitude: lat, longitude: lng } = pos.coords;
+                        const optId = 'opt-loc-' + Date.now();
+                        const optimisticMsg = {
+                            _id: optId,
+                            phone: selectedPhone,
+                            text: '📍 Localização compartilhada',
+                            direction: 'sent',
+                            type: 'location',
+                            timestamp: new Date().toISOString(),
+                            status: 'pending',
+                            isOptimistic: true,
+                            locationData: { lat, lng, name: null, address: null }
+                        };
+                        setMessages(prev => [...prev, optimisticMsg]);
+                        requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }));
+                        try {
+                            const res = await fetch('/api/messages/send', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ phone: selectedPhone, lat, lng })
+                            });
+                            if (!res.ok) {
+                                const err = await res.json().catch(() => ({}));
+                                throw new Error(err.error || `HTTP ${res.status}`);
+                            }
+                        } catch (err) {
+                            setMessages(prev => prev.map(m =>
+                                m._id === optId ? { ...m, status: 'failed', error: err.message } : m
+                            ));
+                        } finally {
+                            setIsSendingLocation(false);
+                        }
+                    },
+                    (err) => {
+                        setIsSendingLocation(false);
+                        const msgs = {
+                            1: 'Permissão de localização negada. Permita o acesso nas configurações do navegador.',
+                            2: 'Não foi possível obter a localização.',
+                            3: 'Tempo esgotado ao obter localização.'
+                        };
+                        alert(msgs[err.code] || 'Erro ao obter localização.');
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            }, [isSendingLocation, selectedPhone]);
+
+            useEffect(() => {
+                if (file && pendingTpl) {
+                    const tpl = pendingTpl;
+                    setPendingTpl(null);
+                    send(tpl);
+                }
+            }, [file, pendingTpl]);
+
+            if (error) {
+                return (
+                    <div className="flex h-full w-full items-center justify-center">
+                        <div className="text-center p-8 bg-red-50 rounded-2xl border border-red-200 max-w-md">
+                            <i className="fas fa-exclamation-circle text-4xl text-red-500 mb-4"></i>
+                            <p className="text-red-600 font-medium mb-4">{error}</p>
+                            <button 
+                                onClick={() => window.location.reload()}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                            >
+                                Tentar Novamente
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex h-full w-full">
+                    <div className={`sidebar ${mobileShowChat ? 'mobile-hidden' : ''}`}>
+                        <div className="p-4 border-b flex justify-between items-center gap-2">
+                            {showSearch ? (
+                                <div className="flex-1 flex items-center gap-2">
+                                    <input
+                                        ref={searchInputRef}
+                                        value={searchText}
+                                        onChange={e => setSearchText(e.target.value)}
+                                        placeholder="Buscar cliente por nome..."
+                                        className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm outline-none focus:ring-2 focus:ring-purple-400"
+                                        onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchText(''); } }}
+                                    />
+                                    <button
+                                        onClick={() => { setShowSearch(false); setSearchText(''); }}
+                                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-red-100 flex items-center justify-center text-slate-500 hover:text-red-500 shrink-0"
+                                        title="Fechar busca"
+                                    >
+                                        <i className="fas fa-times text-sm"></i>
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="peoople-logo">PeOople</div>
+                                    <button
+                                        onClick={() => setShowSearch(true)}
+                                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-purple-100 flex items-center justify-center text-slate-500 hover:text-purple-700 transition-colors"
+                                        title="Buscar cliente"
+                                    >
+                                        <i className="fas fa-search text-sm"></i>
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        <div className="overflow-y-auto flex-1">
+                            {filteredConversations.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400">
+                                    <i className="fas fa-comments text-3xl mb-2"></i>
+                                    <p>{searchText ? 'Nenhum resultado' : 'Nenhuma conversa'}</p>
+                                </div>
+                            ) : (
+                                filteredConversations.map(c => (
+                                    <div 
+                                        key={c.phone} 
+                                        onClick={() => { setSelectedPhone(c.phone); setMobileShowChat(true); }} 
+                                        className={`flex items-center p-4 cursor-pointer hover:bg-slate-50 border-b ${selectedPhone === c.phone ? 'bg-purple-50 border-r-4 border-r-purple-700' : (unreadCounts?.[c.phone] > 0 ? 'bg-purple-50/40' : '')}`}
+                                    >
+                                        <div className="relative mr-3 shrink-0">
+                                            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold">
+                                                {(c.name || c.phone || '?')[0].toUpperCase()}
+                                            </div>
+                                            {(unreadCounts?.[c.phone] || 0) > 0 && (
+                                                <span className="absolute -top-1 -right-1 bg-purple-700 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow">
+                                                    {unreadCounts[c.phone] > 99 ? '99+' : unreadCounts[c.phone]}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className={`truncate ${(unreadCounts?.[c.phone] || 0) > 0 ? 'font-black text-slate-900' : 'font-bold text-slate-800'}`}>{c.name || c.phone}</span>
+                                                <WindowTimer lastReceived={c.lastReceived} />
+                                            </div>
+                                            <div className={`text-sm truncate ${(unreadCounts?.[c.phone] || 0) > 0 ? 'font-semibold text-slate-700' : 'text-slate-500'}`}>{c.lastMessage || 'Sem mensagens'}</div>
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {(c.tags || []).map(t => (
+                                                    <span 
+                                                        key={t} 
+                                                        className="tag-badge" 
+                                                        style={{ backgroundColor: config?.tagColors?.[t] || '#e2e8f0' }}
+                                                    >
+                                                        {t}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                    <div className={`chat-area ${!mobileShowChat ? 'mobile-hidden' : ''}`}>
+                        {selectedPhone ? (
+                            contact ? (
+                                <>
+                                    <div className="p-4 bg-white border-b flex items-center justify-between shadow-sm z-10">
+                                        <div className="flex items-center">
+                                            <button
+                                                className="mobile-back-btn w-9 h-9 rounded-full bg-slate-100 items-center justify-center text-slate-600 hover:bg-purple-100 hover:text-purple-700 mr-2 shrink-0"
+                                                onClick={() => setMobileShowChat(false)}
+                                                title="Voltar"
+                                            >
+                                                <i className="fas fa-arrow-left text-sm"></i>
+                                            </button>
+                                            <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center mr-3 text-white font-bold shrink-0">
+                                                {(contact.name || '?')[0].toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-slate-800">{contact.name || contact.phone}</div>
+                                                <div className="text-xs text-slate-500">{contact.phone}</div>
+                                            </div>
+                                        </div>
+                                        <WindowTimer lastReceived={contact.lastReceived} />
+                                    </div>
+                                    <div 
+                                        className="flex-1 overflow-y-auto p-6 flex flex-col messages-scroll" 
+                                        ref={scrollRef} 
+                                        onScroll={handleScroll}
+                                        style={{minHeight: 0}}
+                                    >
+                                        {isLoadingMore && (
+                                            <div className="flex justify-center py-2 mb-2">
+                                                <div className="flex items-center gap-2 text-xs text-slate-400 bg-white px-3 py-1.5 rounded-full shadow-sm">
+                                                    <i className="fas fa-circle-notch animate-spin"></i> Carregando mensagens antigas...
+                                                </div>
+                                            </div>
+                                        )}
+                                        {!isLoadingMore && hasMore && (
+                                            <div className="flex justify-center py-2 mb-2">
+                                                <button onClick={loadMoreMessages} className="text-xs text-purple-600 bg-white px-3 py-1.5 rounded-full shadow-sm hover:bg-purple-50 border border-purple-100">
+                                                    <i className="fas fa-chevron-up mr-1"></i> Carregar mensagens anteriores
+                                                </button>
+                                            </div>
+                                        )}
+                                        {isLoading ? (
+                                            <div className="space-y-4">
+                                                {[1,2,3].map(i => (
+                                                    <div key={i} className={`w-48 h-12 rounded-xl loading-shimmer ${i%2===0?'self-end':'self-start'}`}></div>
+                                                ))}
+                                            </div>
+                                        ) : (messages || []).length === 0 ? (
+                                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                                                <i className="fas fa-comment-slash text-4xl mb-2"></i>
+                                                <p>Sem mensagens</p>
+                                            </div>
+                                        ) : (
+                                            (messages || []).map((m, i) => {
+                                                const msgId = String(m._id || m.wamid || i);
+                                                const msgReactions = reactions[msgId] || {};
+                                                const activeReactions = Object.entries(msgReactions).filter(([,c]) => c > 0);
+                                                return (
+                                                <div key={msgId} className={`msg-row ${m.direction === 'sent' ? 'sent' : 'received'}`}>
+                                                    <button className="reply-btn" onClick={() => setReplyTo(m)} title="Responder">
+                                                        <i className="fas fa-reply text-xs"></i>
+                                                    </button>
+                                                    <div style={{display:'flex', flexDirection:'column', alignItems: m.direction==='sent'?'flex-end':'flex-start', position:'relative', maxWidth:'70%'}}>
+                                                        {reactionTarget === msgId && (
+                                                            <div className="reaction-picker" style={{[m.direction==='sent'?'right':'left']: 0}}>
+                                                                {QUICK_REACTIONS.map(emoji => (
+                                                                    <button key={emoji} className="reaction-emoji-btn" onClick={() => toggleReaction(msgId, emoji)} title={emoji}>{emoji}</button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    <div 
+                                                        className={`message-bubble msg-reaction-trigger ${m.status === 'failed' ? 'message-failed' : m.direction === 'sent' ? 'message-sent' : 'message-received'} ${m.status === 'pending' ? 'optimistic-pending' : ''}`}
+                                                        onDoubleClick={() => setReactionTarget(prev => prev === msgId ? null : msgId)}
+                                                    >
+                                                        {m.type === 'location' && m.locationData ? (
+                                                            <a
+                                                                href={`https://maps.google.com/?q=${m.locationData.lat},${m.locationData.lng}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="block mb-2 rounded-xl overflow-hidden hover:opacity-80 transition-opacity"
+                                                                style={{textDecoration:'none'}}
+                                                            >
+                                                                <div className={`flex items-center gap-3 p-3 rounded-xl ${m.direction==='sent'?'bg-white/15':'bg-slate-100'}`}>
+                                                                    <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 shadow">
+                                                                        <i className="fas fa-map-marker-alt text-white"></i>
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        {m.locationData.name && <div className="font-bold text-sm truncate">{m.locationData.name}</div>}
+                                                                        {m.locationData.address && <div className="text-xs opacity-75 truncate">{m.locationData.address}</div>}
+                                                                        <div className="text-[10px] opacity-60">{Number(m.locationData.lat).toFixed(5)}, {Number(m.locationData.lng).toFixed(5)}</div>
+                                                                        <div className={`text-xs font-bold mt-0.5 ${m.direction==='sent'?'text-blue-200':'text-blue-500'}`}>Ver no Google Maps →</div>
+                                                                    </div>
+                                                                </div>
+                                                            </a>
+                                                        ) : m.mediaData ? (
+                                                            m.type === 'image' ? 
+                                                                <img src={m.mediaData} className="rounded-lg mb-2 max-w-full max-h-64 object-cover cursor-pointer" alt="Mídia" onClick={() => window.open(m.mediaData, '_blank')} /> :
+                                                            m.type === 'audio' ?
+                                                                <audio controls src={m.mediaData} className="w-full mb-2 max-w-xs" style={{height:'36px'}} /> :
+                                                            m.type === 'video' ?
+                                                                <video controls src={m.mediaData} className="rounded-lg mb-2 max-w-full max-h-64" /> :
+                                                                <div className="flex items-center p-2 bg-black/5 rounded mb-2">
+                                                                    <i className="fas fa-file-pdf mr-2 text-red-500"></i>
+                                                                    <span className="text-xs truncate">{m.fileName || 'Arquivo'}</span>
+                                                                </div>
+                                                        ) : ['image','audio','video','document'].includes(m.type) ? (
+                                                            <div className="flex items-center p-2 bg-black/5 rounded mb-2 opacity-60">
+                                                                <i className={`fas ${m.type==='audio'?'fa-microphone':m.type==='video'?'fa-video':m.type==='image'?'fa-image':'fa-file'} mr-2 text-slate-400`}></i>
+                                                                <span className="text-xs text-slate-400">Carregando {m.type}...</span>
+                                                            </div>
+                                                        ) : null}
+                                                        <div className="whitespace-pre-wrap break-words">{m.text || ''}</div>
+                                                        <div className={`text-[10px] mt-1 flex items-center justify-end ${m.status === 'failed' ? 'text-red-400' : m.direction === 'sent' ? 'text-purple-200' : 'text-slate-400'}`}>
+                                                            {m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                            {m.direction === 'sent' && (
+                                                                <span className="ml-1">
+                                                                    {m.status === 'failed' ? <i className="fas fa-exclamation-circle text-red-500"></i> :
+                                                                     m.status === 'read' ? <i className="fas fa-check-double text-blue-300"></i> : 
+                                                                     m.status === 'pending' ? <i className="fas fa-clock text-yellow-300"></i> :
+                                                                     <i className="fas fa-check"></i>}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {m.status === 'failed' && m.error && (
+                                                            <div className="mt-2 px-3 py-2 bg-red-600 rounded-lg text-[11px] text-white break-words leading-snug font-medium">
+                                                                <i className="fas fa-exclamation-circle mr-1"></i>{translateMetaError(m.error)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {activeReactions.length > 0 && (
+                                                        <div style={{display:'flex', gap:'4px', flexWrap:'wrap', marginTop:'3px'}}>
+                                                            {activeReactions.map(([emoji]) => (
+                                                                <button key={emoji} className="reaction-badge my-reaction" onClick={() => toggleReaction(msgId, emoji)}>
+                                                                    <span>{emoji}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    </div>
+                                                </div>
+                                                );
+                                            })
+                                        )}
+                                        <div ref={endRef} />
+                                    </div>
+                                    <div className="chat-composer p-4 bg-white border-t">
+                                        {replyTo && (
+                                            <div className="mb-2 flex items-start gap-2 p-2 bg-purple-50 border-l-4 border-purple-600 rounded-lg">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[10px] font-black text-purple-600 mb-0.5">
+                                                        <i className="fas fa-reply mr-1"></i>
+                                                        {replyTo.direction === 'sent' ? 'Você' : contact?.name || replyTo.phone}
+                                                    </div>
+                                                    <div className="text-xs text-slate-600 truncate">{replyTo.text || '[mídia]'}</div>
+                                                </div>
+                                                <button onClick={() => setReplyTo(null)} className="text-slate-400 hover:text-red-500 flex-shrink-0 mt-0.5">
+                                                    <i className="fas fa-times text-xs"></i>
+                                                </button>
+                                            </div>
+                                        )}
+                                        {file && (
+                                            <div className="mb-3 p-3 bg-purple-50 rounded-xl border flex items-center">
+                                                <div className="w-12 h-12 bg-purple-200 rounded flex items-center justify-center mr-3">
+                                                    {file.type?.includes('image') ? 
+                                                        <img src={file.data} className="w-full h-full object-cover rounded" alt="" /> : 
+                                                        <i className="fas fa-file text-purple-600"></i>
+                                                    }
+                                                </div>
+                                                <div className="flex-1 truncate text-sm font-bold">{file.name}</div>
+                                                <button onClick={() => setFile(null)} className="p-2 text-red-400">
+                                                    <i className="fas fa-times-circle"></i>
+                                                </button>
+                                            </div>
+                                        )}
+                                        {showEmoji && (
+                                            <div ref={emojiRef} className="emoji-picker-panel">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-[10px] font-black text-slate-400">EMOJIS</span>
+                                                    <button onClick={() => setShowEmoji(false)} className="text-slate-400 hover:text-red-500 text-xs">
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="emoji-grid">
+                                                    {EMOJIS.map((emoji, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            className="emoji-btn"
+                                                            onClick={() => insertEmoji(emoji)}
+                                                            title={emoji}
+                                                        >{emoji}</button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="chat-input-row flex items-center gap-2">
+                                            <button onClick={() => setShowQr(!showQr)} className={`p-3 rounded-full transition-colors ${showQr?'bg-purple-600 text-white':'bg-slate-100 hover:bg-slate-200'}`} title="Respostas Rápidas">
+                                                <i className="fas fa-bolt"></i>
+                                            </button>
+                                            <button onClick={() => setShowTpl(!showTpl)} className={`p-3 rounded-full transition-colors ${showTpl?'bg-purple-600 text-white':'bg-slate-100 hover:bg-slate-200'}`} title="Templates">
+                                                <i className="fas fa-rocket"></i>
+                                            </button>
+                                            <button onClick={() => fInput.current?.click()} className="p-3 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors" title="Anexar">
+                                                <i className="fas fa-paperclip"></i>
+                                            </button>
+                                            <button
+                                                onClick={sendLocation}
+                                                disabled={isSendingLocation}
+                                                className="p-3 rounded-full bg-slate-100 hover:bg-green-100 hover:text-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                title="Compartilhar minha localização"
+                                            >
+                                                <i className={`fas ${isSendingLocation ? 'fa-circle-notch animate-spin' : 'fa-map-marker-alt'}`}></i>
+                                            </button>
+                                            <button
+                                                onClick={() => setShowEmoji(prev => !prev)}
+                                                className={`p-3 rounded-full transition-colors ${showEmoji ? 'bg-purple-600 text-white' : 'bg-slate-100 hover:bg-slate-200'}`}
+                                                title="Emojis"
+                                            >
+                                                <i className="fas fa-smile"></i>
+                                            </button>
+                                            <input 
+                                                type="file" 
+                                                ref={fInput} 
+                                                className="hidden" 
+                                                accept="image/*,.pdf,.doc,.docx"
+                                                onChange={e => { 
+                                                    const fl = e.target.files[0]; 
+                                                    if(fl) processFile(fl).then(setFile);
+                                                }} 
+                                            />
+                                            <input 
+                                                type="text"
+                                                ref={inputRef}
+                                                value={inputText} 
+                                                onChange={e => setInputText(e.target.value)} 
+                                                onFocus={() => document.body.classList.add('mobile-composer-focused')}
+                                                onBlur={() => setTimeout(() => document.body.classList.remove('mobile-composer-focused'), 120)}
+                                                onKeyPress={e => e.key === 'Enter' && !isSending && send()} 
+                                                placeholder="Digite uma mensagem..." 
+                                                className="flex-1 p-3 bg-slate-100 rounded-full outline-none focus:ring-2 focus:ring-purple-500"
+                                                autoComplete="off"
+                                                autoCorrect="off"
+                                                autoCapitalize="sentences"
+                                                spellCheck="false"
+                                                inputMode="text"
+                                                enterKeyHint="send"
+                                                name="chat-message"
+                                                data-form-type="other"
+                                                data-lpignore="true"
+                                                data-1p-ignore="true"
+                                                disabled={isSending}
+                                            />
+                                            <button 
+                                                onClick={() => send()} 
+                                                disabled={isSending || (!inputText && !file)} 
+                                                className="p-4 bg-purple-700 text-white rounded-full shadow-lg hover:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                <i className={`fas ${isSending ? 'fa-circle-notch animate-spin' : 'fa-paper-plane'}`}></i>
+                                            </button>
+                                        </div>
+                                        {showQr && (quickReplies || []).length > 0 && (
+                                            <div className="mt-3 p-2 bg-slate-50 rounded-xl border grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                                                {(quickReplies || []).map(q => (
+                                                    <button 
+                                                        key={q._id} 
+                                                        onClick={() => send(null, q)} 
+                                                        className="text-left p-2 bg-white border rounded hover:border-purple-400 transition-colors"
+                                                    >
+                                                        <div className="font-bold text-xs text-purple-600">/{q.shortcut}</div>
+                                                        <div className="text-[10px] text-slate-500 truncate">{q.text}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {showTpl && (templates || []).length > 0 && (
+                                            <div className="mt-3 p-2 bg-slate-50 rounded-xl border grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                                                {(templates || []).map(t => (
+                                                    <button 
+                                                        key={t.id || t.name} 
+                                                        onClick={() => send(t)} 
+                                                        className="text-left p-2 bg-white border rounded hover:border-purple-400 transition-colors"
+                                                    >
+                                                        <div className="font-bold text-xs truncate">{t.name}</div>
+                                                        <div className="text-[10px] text-slate-500 truncate">
+                                                            {t.components?.find(c=>c.type==='BODY')?.text?.substring(0, 30) || ''}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50">
+                                    <i className="fas fa-user-slash text-4xl mb-2"></i>
+                                    <p>Contato não encontrado</p>
+                                </div>
+                            )
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50">
+                                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+                                    <i className="fas fa-comments text-3xl text-purple-200"></i>
+                                </div>
+                                <div className="text-lg font-medium">Selecione uma conversa</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        });
+
+        const BulkView = memo(({ leads, templates, config, onLeadsUpdate }) => {
+            const [sel, setSel] = useState([]); 
+            const [tpl, setTpl] = useState(null); 
+            const [file, setFile] = useState(null); 
+            const [busy, setBusy] = useState(false); 
+            const [prog, setProg] = useState({c:0, t:0});
+            const [filterTag, setFilterTag] = useState(null);
+            const fRef = useRef(null);
+            const excelRef = useRef(null);
+            const [excelLoading, setExcelLoading] = useState(false);
+            const [excelResult, setExcelResult] = useState(null);
+            const [importedPhones, setImportedPhones] = useState([]);
+
+            const handleExcelImport = async (e) => {
+                const f = e.target.files[0];
+                if (!f) return;
+                e.target.value = '';
+                setExcelLoading(true);
+                setExcelResult(null);
+                try {
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                        try {
+                            // 1. Extrai telefones do Excel
+                            const res = await fetch('/api/excel/parse', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ excelData: ev.target.result })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Erro ao processar');
+                            if (data.phones.length === 0) {
+                                setExcelResult({ count: 0 });
+                                setExcelLoading(false);
+                                return;
+                            }
+
+                            // 2. Salva como leads no banco (não sobrescreve dados existentes)
+                            await fetch('/api/leads/batch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ phones: data.phones })
+                            });
+
+                            // 3. Mostra na lista imediatamente (antes do refresh)
+                            setImportedPhones(data.phones);
+
+                            // 4. Adiciona à seleção (sem duplicatas)
+                            setSel(prev => Array.from(new Set([...prev, ...data.phones])));
+
+                            setExcelResult({ count: data.phones.length });
+
+                            // 5. Atualiza a lista de leads da sidebar
+                            if (onLeadsUpdate) onLeadsUpdate();
+                        } catch (err) {
+                            alert('Erro ao importar Excel: ' + err.message);
+                        }
+                        setExcelLoading(false);
+                    };
+                    reader.readAsDataURL(f);
+                } catch (err) {
+                    alert('Erro ao ler arquivo: ' + err.message);
+                    setExcelLoading(false);
+                }
+            };
+
+            const tagColors = config?.tagColors || {};
+            const availableTags = Object.keys(tagColors);
+            const filteredLeads = useMemo(() => {
+                const base = filterTag
+                    ? (leads || []).filter(l => (l.tags || []).includes(filterTag))
+                    : (leads || []);
+                // Inclui telefones importados do Excel que ainda não estão na lista de leads
+                const existingPhones = new Set(base.map(l => l.phone));
+                const extras = importedPhones
+                    .filter(p => !existingPhones.has(p))
+                    .map(p => ({ phone: p, name: '', tags: [], _fromExcel: true }));
+                return [...base, ...extras];
+            }, [leads, filterTag, importedPhones]);
+
+            const run = async () => { 
+                if(!tpl || sel.length===0 || busy) return; 
+                setBusy(true);
+                setProg({c:0, t:sel.length, erros:0});
+
+                // Se template tem foto: faz upload UMA vez e reutiliza o mediaId
+                let uploadedMediaId = null;
+                const hasHeaderImage = tpl.components?.some(c => c.type === 'HEADER' && c.format === 'IMAGE');
+                if (hasHeaderImage && file?.data) {
+                    try {
+                        const upRes = await fetch('/api/media/upload', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ mediaData: file.data, mediaType: file.type, fileName: file.name })
+                        });
+                        if (!upRes.ok) {
+                            const e = await upRes.json().catch(()=>({}));
+                            setBusy(false);
+                            alert('Erro ao enviar foto para a Meta: ' + (e.error || upRes.status));
+                            return;
+                        }
+                        const upData = await upRes.json();
+                        uploadedMediaId = upData.mediaId;
+                    } catch(e) {
+                        setBusy(false);
+                        alert('Erro ao enviar foto: ' + e.message);
+                        return;
+                    }
+                }
+
+                const templateText = tpl.components?.find(c=>c.type==='BODY')?.text || tpl.name;
+                const templateLanguage = tpl.language || 'pt_BR';
+                let erros = 0;
+                const erroDetalhes = [];
+                for(let i=0; i<sel.length; i++){
+                    try {
+                        const res = await fetch('/api/messages/send', {
+                            method:'POST',
+                            headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({
+                                phone: sel[i],
+                                templateName: tpl.name,
+                                languageCode: templateLanguage,
+                                messageText: templateText,
+                                mediaId: uploadedMediaId || undefined,
+                                mediaType: uploadedMediaId ? file?.type : undefined,
+                                mediaData: (!uploadedMediaId && file?.data) ? file.data : undefined,
+                                fileName: file?.name
+                            })
+                        });
+                        if (!res.ok) {
+                            erros++;
+                            try {
+                                const errData = await res.json();
+                                erroDetalhes.push(`${sel[i]}: ${errData.error || res.status}`);
+                            } catch { erroDetalhes.push(`${sel[i]}: HTTP ${res.status}`); }
+                        }
+                    } catch(e) {
+                        console.error('Erro no disparo:', e);
+                        erros++;
+                        erroDetalhes.push(`${sel[i]}: ${e.message}`);
+                    }
+                    setProg(p=>({...p, c:i+1, erros}));
+                    await new Promise(r=>setTimeout(r, 1000));
+                }
+                const ok = sel.length - erros;
+                const detalhesMsg = erroDetalhes.length > 0 
+                    ? `\n\nDetalhes dos erros:\n${erroDetalhes.slice(0,5).join('\n')}${erroDetalhes.length > 5 ? `\n...e mais ${erroDetalhes.length - 5}` : ''}`
+                    : '';
+                alert(`Concluído!\n✅ ${ok} enviados${erros > 0 ? `\n❌ ${erros} com erro${detalhesMsg}` : ''}`);
+                setBusy(false);
+                setSel([]);
+                setTpl(null);
+                setFile(null);
+            };
+
+            const getTemplatePreview = (template) => {
+                if (!template) return null;
+                const bodyComponent = template.components?.find(c => c.type === 'BODY');
+                return bodyComponent?.text || 'Sem preview disponível';
+            };
+
+            return (
+                <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto">
+                    <h2 className="text-2xl font-black mb-6">
+                        <i className="fas fa-rocket mr-2 text-purple-600"></i> 
+                        Disparo em Massa
+                    </h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <div className="bg-white p-4 rounded-2xl border mb-4">
+                                <h3 className="font-bold text-xs text-slate-400 mb-3">1. TEMPLATE</h3>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {(templates || []).map(t => (
+                                        <div 
+                                            key={t.id} 
+                                            onClick={()=>setTpl(t)} 
+                                            className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${tpl?.id===t.id?'border-purple-600 bg-purple-50':'border-slate-50 hover:border-purple-200'}`}
+                                        >
+                                            <div className="font-bold text-sm">{t.name}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            {tpl && (
+                                <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 mb-4">
+                                    <h4 className="font-bold text-xs text-purple-600 mb-2">
+                                        <i className="fas fa-eye mr-1"></i> PREVIEW: {tpl.name}
+                                    </h4>
+                                    <div className="bg-white p-3 rounded-xl text-sm text-slate-700 whitespace-pre-wrap">
+                                        {getTemplatePreview(tpl)}
+                                    </div>
+                                    {tpl.components?.some(c => c.type === 'HEADER' && c.format === 'IMAGE') && (
+                                        <div className="mt-3">
+                                            <div 
+                                                className="bg-white p-4 rounded-2xl border border-dashed border-purple-300 text-center cursor-pointer hover:bg-purple-50 transition-colors" 
+                                                onClick={()=>fRef.current.click()}
+                                            >
+                                                {file ? (
+                                                    <img src={file.data} className="w-20 h-20 mx-auto rounded mb-2 object-cover" alt="Preview" />
+                                                ) : (
+                                                    <i className="fas fa-image text-purple-300 text-2xl mb-2"></i>
+                                                )}
+                                                <div className="text-xs font-bold text-purple-600">
+                                                    {file ? file.name : 'Anexar Foto ao Template'}
+                                                </div>
+                                                <input 
+                                                    type="file" 
+                                                    ref={fRef} 
+                                                    className="hidden" 
+                                                    accept="image/*"
+                                                    onChange={e=>{
+                                                        const f=e.target.files[0];
+                                                        if(f) processFile(f).then(setFile);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <div className="bg-white p-4 rounded-2xl border mb-4">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="font-bold text-xs text-slate-400">2. LEADS ({sel.length} selecionados / {filteredLeads.length} exibidos)</h3>
+                                    <div className="flex gap-2 items-center">
+                                        <button onClick={()=>setSel([])} className="text-[10px] font-bold text-slate-400 hover:text-slate-600">Nenhum</button>
+                                        <button onClick={()=>setSel(filteredLeads.map(l=>l.phone))} className="text-[10px] font-bold text-purple-600 hover:text-purple-800">Todos visíveis</button>
+                                        <button
+                                            onClick={()=>excelRef.current.click()}
+                                            disabled={excelLoading}
+                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold hover:bg-green-100 transition-colors disabled:opacity-50"
+                                            title="Importar telefones de planilha Excel"
+                                        >
+                                            {excelLoading
+                                                ? <><i className="fas fa-spinner fa-spin"></i> Lendo...</>
+                                                : <><i className="fas fa-file-excel"></i> Importar Excel</>
+                                            }
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={excelRef}
+                                            className="hidden"
+                                            accept=".xlsx,.xls,.csv"
+                                            onChange={handleExcelImport}
+                                        />
+                                    </div>
+                                </div>
+                                {excelResult && (
+                                    <div className={`mb-3 px-3 py-2 rounded-xl text-[11px] font-bold flex items-center gap-2 ${excelResult.count === 0 ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                                        {excelResult.count === 0
+                                            ? <><i className="fas fa-exclamation-circle"></i> Nenhum telefone brasileiro válido encontrado na planilha.</>
+                                            : <><i className="fas fa-check-circle"></i> {excelResult.count} telefone{excelResult.count > 1 ? 's' : ''} importado{excelResult.count > 1 ? 's' : ''} e adicionado{excelResult.count > 1 ? 's' : ''} à seleção.</>
+                                        }
+                                        <button onClick={()=>setExcelResult(null)} className="ml-auto text-current opacity-50 hover:opacity-100"><i className="fas fa-times"></i></button>
+                                    </div>
+                                )}
+                                {availableTags.length > 0 && (
+                                    <div className="mb-3 flex flex-wrap gap-1">
+                                        <button
+                                            onClick={()=>setFilterTag(null)}
+                                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${!filterTag ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-500 border-slate-200 hover:border-purple-300'}`}
+                                        >Todas</button>
+                                        {availableTags.map(tag => (
+                                            <button
+                                                key={tag}
+                                                onClick={()=>setFilterTag(prev => prev===tag ? null : tag)}
+                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${filterTag===tag ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-purple-300'}`}
+                                                style={filterTag===tag ? {backgroundColor: tagColors[tag], borderColor: tagColors[tag]} : {}}
+                                            >
+                                                <span style={filterTag!==tag ? {color: tagColors[tag]} : {}}>{tag}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
+                                    {filteredLeads.map(l => (
+                                        <div 
+                                            key={l.phone} 
+                                            onClick={()=>setSel(prev=>prev.includes(l.phone)?prev.filter(p=>p!==l.phone):[...prev, l.phone])} 
+                                            className={`p-3 rounded-xl border cursor-pointer text-xs flex items-center justify-between transition-all ${sel.includes(l.phone)?'border-purple-600 bg-purple-50':'bg-slate-50 hover:bg-slate-100'}`}
+                                        >
+                                            <div className="flex items-center">
+                                                <div className={`w-3 h-3 rounded-full mr-3 flex-shrink-0 ${sel.includes(l.phone)?'bg-purple-600':'bg-slate-300'}`}></div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800 flex items-center gap-1">
+                                                        {l.name || <span className="text-slate-400 font-normal italic text-[11px]">sem nome</span>}
+                                                        {l._fromExcel && <span className="text-[9px] bg-green-100 text-green-700 border border-green-200 rounded px-1 font-bold">Excel</span>}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 font-mono">{l.phone}</div>
+                                                    {(l.tags || []).length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {l.tags.map(t => (
+                                                                <span key={t} className="tag-badge" style={{backgroundColor: tagColors[t] || '#e2e8f0', color: '#fff', fontSize: '9px'}}>{t}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {sel.includes(l.phone) && <i className="fas fa-check text-purple-600 text-xs"></i>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <button 
+                                onClick={run} 
+                                disabled={busy||!tpl||sel.length===0} 
+                                className={`w-full py-4 rounded-2xl font-black transition-all ${busy||!tpl||sel.length===0?'bg-slate-300 text-slate-500':'bg-purple-700 text-white hover:bg-purple-800 shadow-lg'}`}
+                            >
+                                {busy ? `ENVIANDO ${prog.c}/${prog.t}${prog.erros > 0 ? ` (${prog.erros} erros)` : ''}` : 'INICIAR DISPARO'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const TagsView = memo(({ config, onUpd }) => {
+            const [tagName, setTagName] = useState('');
+            const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+            const [editingTag, setEditingTag] = useState(null);
+            
+            const tagColors = config?.tagColors || {};
+            
+            const saveTag = async (e) => {
+                e.preventDefault();
+                if (!tagName.trim()) return;
+                
+                const normalizedTag = tagName.trim().toLowerCase();
+                const newTagColors = { ...tagColors, [normalizedTag]: selectedColor };
+                
+                try {
+                    await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...config, tagColors: newTagColors })
+                    });
+                    setTagName('');
+                    setEditingTag(null);
+                    onUpd();
+                } catch (err) {
+                    console.error('Erro salvando tag:', err);
+                    alert('Erro ao salvar tag');
+                }
+            };
+
+            const deleteTag = async (tagName) => {
+                if (!confirm(`Excluir a tag "${tagName}"?`)) return;
+                const newTagColors = { ...tagColors };
+                delete newTagColors[tagName];
+                try {
+                    await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...config, tagColors: newTagColors })
+                    });
+                    onUpd();
+                } catch (err) {
+                    console.error('Erro excluindo tag:', err);
+                }
+            };
+
+            const editTag = (name, color) => {
+                setTagName(name);
+                setSelectedColor(color);
+                setEditingTag(name);
+            };
+
+            return (
+                <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto">
+                    <h2 className="text-2xl font-black mb-6">
+                        <i className="fas fa-tags mr-2 text-purple-600"></i> 
+                        Gerenciar Tags
+                    </h2>
+                    <div className="bg-white p-6 rounded-2xl border mb-6">
+                        <form onSubmit={saveTag} className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 mb-2 block">NOME DA TAG</label>
+                                <input 
+                                    value={tagName} 
+                                    onChange={e => setTagName(e.target.value)} 
+                                    placeholder="Ex: Cliente, VIP, Pendente..."
+                                    className="w-full p-3 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 mb-2 block">COR DA TAG</label>
+                                <div className="flex flex-wrap gap-3">
+                                    {PRESET_COLORS.map(color => (
+                                        <div
+                                            key={color}
+                                            onClick={() => setSelectedColor(color)}
+                                            className={`color-picker ${selectedColor === color ? 'selected' : ''}`}
+                                            style={{ backgroundColor: color }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 pt-2">
+                                <span 
+                                    className="px-4 py-2 rounded-full text-white text-sm font-bold"
+                                    style={{ backgroundColor: selectedColor }}
+                                >
+                                    {tagName || 'Preview'}
+                                </span>
+                            </div>
+                            <button type="submit" className="w-full py-3 bg-purple-700 text-white rounded-xl font-bold hover:bg-purple-800 transition-colors">
+                                {editingTag ? 'ATUALIZAR TAG' : 'CRIAR TAG'}
+                            </button>
+                            {editingTag && (
+                                <button 
+                                    type="button"
+                                    onClick={() => { setTagName(''); setEditingTag(null); setSelectedColor(PRESET_COLORS[0]); }}
+                                    className="w-full py-3 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
+                                >
+                                    CANCELAR EDIÇÃO
+                                </button>
+                            )}
+                        </form>
+                    </div>
+                    <div className="bg-white rounded-2xl border overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50">
+                            <h3 className="font-bold text-sm text-slate-700">Tags Existentes ({Object.keys(tagColors).length})</h3>
+                        </div>
+                        <div className="p-4">
+                            {Object.keys(tagColors).length === 0 ? (
+                                <div className="text-center text-slate-400 py-8">
+                                    <i className="fas fa-tags text-3xl mb-2"></i>
+                                    <p>Nenhuma tag criada ainda</p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap gap-3">
+                                    {Object.entries(tagColors).map(([name, color]) => (
+                                        <div 
+                                            key={name}
+                                            className="group flex items-center gap-2 px-3 py-2 rounded-full border-2 hover:shadow-md transition-all cursor-pointer"
+                                            style={{ borderColor: color, backgroundColor: color + '20' }}
+                                            onClick={() => editTag(name, color)}
+                                        >
+                                            <span className="px-2 py-1 rounded-full text-white text-xs font-bold" style={{ backgroundColor: color }}>{name}</span>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); deleteTag(name); }}
+                                                className="w-6 h-6 rounded-full bg-white/50 hover:bg-red-100 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"
+                                            >
+                                                <i className="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const LeadsView = memo(({ leads, config, onUpd, onChat, socket }) => {
+            const [n, setN] = useState(''); 
+            const [p, setP] = useState(''); 
+            const [selectedTags, setSelectedTags] = useState([]); 
+            const [edit, setEdit] = useState(null);
+            const [showTagSelector, setShowTagSelector] = useState(false);
+            
+            const tagColors = config?.tagColors || {};
+            const availableTags = Object.keys(tagColors);
+
+            useEffect(() => { 
+                if(!socket) return; 
+                socket.on('leadUpdate', onUpd); 
+                socket.on('leadDelete', onUpd); 
+                return () => { socket.off('leadUpdate'); socket.off('leadDelete'); }; 
+            }, [socket, onUpd]);
+
+            const toggleTag = (tag) => {
+                setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+            };
+
+            const save = async (e) => { 
+                e.preventDefault(); 
+                try {
+                    await fetch('/api/leads', { 
+                        method:'POST', 
+                        headers:{'Content-Type':'application/json'}, 
+                        body:JSON.stringify({ name:n, phone:p, tags: selectedTags }) 
+                    }); 
+                    setN(''); setP(''); setSelectedTags([]); setEdit(null); setShowTagSelector(false);
+                } catch (err) {
+                    console.error('Erro salvando lead:', err);
+                    alert('Erro ao salvar lead');
+                }
+            };
+
+            const startEdit = (lead) => {
+                setN(lead.name);
+                setP(lead.phone);
+                setSelectedTags(lead.tags || []);
+                setEdit(lead.phone);
+            };
+
+            return (
+                <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto">
+                    <h2 className="text-2xl font-black mb-6"><i className="fas fa-users mr-2 text-purple-600"></i> Leads</h2>
+                    <div className="bg-white p-6 rounded-2xl border mb-6">
+                        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <input value={n} onChange={e=>setN(e.target.value)} placeholder="Nome" className="p-3 bg-slate-50 rounded-xl outline-none" required />
+                            <input value={p} onChange={e=>setP(e.target.value)} placeholder="Telefone" className="p-3 bg-slate-50 rounded-xl outline-none" required disabled={!!edit} />
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTagSelector(!showTagSelector)}
+                                    className="w-full p-3 bg-slate-50 rounded-xl outline-none text-left flex items-center justify-between"
+                                >
+                                    <span className={selectedTags.length ? 'text-slate-800' : 'text-slate-400'}>
+                                        {selectedTags.length ? `${selectedTags.length} tag(s)` : 'Selecionar tags...'}
+                                    </span>
+                                    <i className={`fas fa-chevron-${showTagSelector ? 'up' : 'down'} text-slate-400`}></i>
+                                </button>
+                                {showTagSelector && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto p-2">
+                                        {availableTags.length === 0 ? (
+                                            <div className="p-3 text-center text-slate-400 text-sm">Nenhuma tag criada. Vá em "Tags" para criar.</div>
+                                        ) : (
+                                            availableTags.map(tag => (
+                                                <div key={tag} onClick={() => toggleTag(tag)} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedTags.includes(tag) ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>
+                                                        {selectedTags.includes(tag) && <i className="fas fa-check text-white text-xs"></i>}
+                                                    </div>
+                                                    <span className="px-2 py-1 rounded-full text-white text-xs font-bold" style={{ backgroundColor: tagColors[tag] }}>{tag}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="md:col-span-3 flex flex-wrap gap-2 min-h-[40px]">
+                                {selectedTags.map(tag => (
+                                    <span key={tag} className="px-3 py-1 rounded-full text-white text-sm font-bold flex items-center gap-2" style={{ backgroundColor: tagColors[tag] }}>
+                                        {tag}
+                                        <button type="button" onClick={() => toggleTag(tag)} className="hover:bg-white/20 rounded-full w-5 h-5 flex items-center justify-center">
+                                            <i className="fas fa-times text-xs"></i>
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                            <button type="submit" className="md:col-span-3 py-3 bg-purple-700 text-white rounded-xl font-bold hover:bg-purple-800 transition-colors">
+                                {edit ? 'ATUALIZAR' : 'SALVAR'}
+                            </button>
+                            {edit && (
+                                <button type="button" onClick={() => { setN(''); setP(''); setSelectedTags([]); setEdit(null); setShowTagSelector(false); }} className="md:col-span-3 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors">
+                                    CANCELAR
+                                </button>
+                            )}
+                        </form>
+                    </div>
+                    <div className="bg-white rounded-2xl border overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50 border-b text-[10px] text-slate-400 uppercase">
+                                <tr><th className="p-4">Nome</th><th className="p-4">Telefone</th><th className="p-4">Tags</th><th className="p-4 text-right">Ações</th></tr>
+                            </thead>
+                            <tbody>
+                                {(leads || []).map(l => (
+                                    <tr key={l.phone} className="border-b hover:bg-slate-50">
+                                        <td className="p-4 font-bold text-sm">{l.name}</td>
+                                        <td className="p-4 text-xs font-mono">{l.phone}</td>
+                                        <td className="p-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {(l.tags || []).map(tag => (
+                                                    <span key={tag} className="tag-badge text-white" style={{ backgroundColor: tagColors[tag] || '#e2e8f0' }}>{tag}</span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            <button onClick={() => onChat(l.phone)} className="w-8 h-8 rounded bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"><i className="fas fa-comment"></i></button>
+                                            <button onClick={() => startEdit(l)} className="w-8 h-8 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"><i className="fas fa-pen"></i></button>
+                                            <button onClick={async () => { if(confirm("Excluir?")) await fetch(`/api/leads/${l.phone}`, {method:'DELETE'}); }} className="w-8 h-8 rounded bg-red-100 text-red-600 hover:bg-red-200 transition-colors"><i className="fas fa-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        });
+
+        const QuickView = memo(({ qr, onUpd }) => {
+            const [s, setS] = useState(''); const [t, setT] = useState(''); const [f, setF] = useState(null); const fR = useRef(null);
+            const save = async (e) => { 
+                e.preventDefault(); 
+                try {
+                    await fetch('/api/quick-replies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shortcut:s, text:t, mediaData:f?.data, mediaName:f?.name, mediaType:f?.type }) }); 
+                    setS(''); setT(''); setF(null); onUpd();
+                } catch (err) { console.error('Erro:', err); alert('Erro ao salvar'); }
+            };
+            return (
+                <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto">
+                    <h2 className="text-2xl font-black mb-6"><i className="fas fa-bolt mr-2 text-purple-600"></i> Respostas Rápidas</h2>
+                    <div className="bg-white p-6 rounded-2xl border mb-6">
+                        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <input value={s} onChange={e=>setS(e.target.value)} placeholder="Atalho" className="w-full p-3 bg-slate-50 rounded-xl mb-4 outline-none" required />
+                                <textarea value={t} onChange={e=>setT(e.target.value)} placeholder="Mensagem" className="w-full p-3 bg-slate-50 rounded-xl h-24 resize-none outline-none" required />
+                            </div>
+                            <div onClick={()=>fR.current.click()} className="border-2 border-dashed border-slate-100 rounded-xl flex flex-col items-center justify-center cursor-pointer">
+                                {f ? <img src={f.data} className="w-16 h-16 rounded object-cover" alt="" /> : <i className="fas fa-paperclip text-slate-300 text-2xl"></i>}
+                                <div className="text-[10px] mt-2 font-bold">{f?f.name:'Anexar Mídia'}</div>
+                                <input type="file" ref={fR} className="hidden" onChange={e=>{const fl=e.target.files[0]; if(fl) processFile(fl).then(setF);}}/>
+                            </div>
+                            <button type="submit" className="md:col-span-2 py-3 bg-purple-700 text-white rounded-xl font-bold">SALVAR</button>
+                        </form>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {(qr || []).map(q=>(
+                            <div key={q._id} className="bg-white p-4 rounded-2xl border relative">
+                                <button onClick={async ()=>{if(confirm("Excluir?")){await fetch(`/api/quick-replies/${q._id}`, {method:'DELETE'}); onUpd();}}} className="absolute top-3 right-3 text-slate-300 hover:text-red-500"><i className="fas fa-times-circle"></i></button>
+                                <div className="font-black text-purple-700 text-xs mb-1">/{q.shortcut}</div>
+                                <div className="text-xs text-slate-600 line-clamp-3">{q.text}</div>
+                                {q.mediaData && <div className="mt-3 pt-3 border-t flex items-center"><i className="fas fa-paperclip text-purple-400 mr-2 text-xs"></i><span className="text-[9px] text-slate-400 truncate">{q.mediaName}</span></div>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        });
+
+        const ConfigView = memo(({ config, onUpd }) => {
+            const [f, setF] = useState(config || {}); 
+            useEffect(() => { setF(config || {}); }, [config]);
+            const save = async (e) => { 
+                e.preventDefault(); 
+                try {
+                    await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(f) }); 
+                    onUpd(); 
+                    alert("Salvo!");
+                } catch (err) { console.error('Erro:', err); alert('Erro ao salvar'); }
+            };
+            return (
+                <div className="p-8 max-w-3xl mx-auto h-full overflow-y-auto">
+                    <h2 className="text-2xl font-black mb-6"><i className="fas fa-cog mr-2 text-purple-600"></i> Configurações</h2>
+                    <form onSubmit={save} className="space-y-4">
+                        <div className="bg-white p-6 rounded-2xl border grid grid-cols-1 gap-4">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400">META ACCESS TOKEN</label>
+                                <input type="password" value={f.metaAccessToken || ''} onChange={e=>setF({...f, metaAccessToken:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl outline-none" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400">PHONE NUMBER ID</label>
+                                    <input value={f.metaPhoneNumberId || ''} onChange={e=>setF({...f, metaPhoneNumberId:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400">BUSINESS ACCOUNT ID</label>
+                                    <input value={f.metaBusinessAccountId || ''} onChange={e=>setF({...f, metaBusinessAccountId:e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl outline-none" />
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" className="w-full py-4 bg-purple-700 text-white rounded-2xl font-black hover:bg-purple-800">SALVAR TUDO</button>
+                    </form>
+                </div>
+            );
+        });
+
+        // ============================================
+        // APP PRINCIPAL
+        // ============================================
+        function App() {
+            const [tab, setTab] = useState('chat'); 
+            const [convs, setConvs] = useState([]); 
+            const [sel, setSel] = useState(null); 
+            const [leads, setLeads] = useState([]); 
+            const [tpls, setTpls] = useState([]); 
+            const [qr, setQr] = useState([]); 
+            const [cfg, setCfg] = useState({}); 
+            const [socket, setSocket] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [unreadCounts, setUnreadCounts] = useState({});
+            const selRef = useRef(null);
+            const notifAudio = useRef(null);
+
+            useEffect(() => {
+                notifAudio.current = new Audio(NOTIFICATION_SOUND);
+                notifAudio.current.volume = 0.5;
+            }, []);
+
+            // Mantém selRef sempre atualizado com o telefone selecionado
+            useEffect(() => { selRef.current = sel; }, [sel]);
+
+            // Atualiza o título da aba com total de não lidas
+            const totalUnread = useMemo(() => Object.values(unreadCounts).reduce((a, b) => a + b, 0), [unreadCounts]);
+            useEffect(() => {
+                document.title = totalUnread > 0
+                    ? `(${totalUnread}) PeOople Hub`
+                    : 'PeOople Hub - Painel Administrativo';
+            }, [totalUnread]);
+
+            // Ao focar na janela, zera não lidas da conversa ativa
+            useEffect(() => {
+                const onFocus = () => {
+                    if (selRef.current) {
+                        setUnreadCounts(prev => { const n = { ...prev }; delete n[selRef.current]; return n; });
+                    }
+                };
+                window.addEventListener('focus', onFocus);
+                return () => window.removeEventListener('focus', onFocus);
+            }, []);
+
+            // Ao selecionar conversa, zera as não lidas dela
+            const handleSelectPhone = useCallback((phone) => {
+                setSel(phone);
+                setTab('chat');
+                setUnreadCounts(prev => { const n = { ...prev }; delete n[phone]; return n; });
+            }, []);
+
+            useEffect(() => {
+                let isMounted = true;
+                
+                const initSocket = () => {
+                    try {
+                        const s = io({ reconnectionAttempts: 5, timeout: 10000, transports: ['websocket', 'polling'] }); 
+                        if (!isMounted) return;
+                        setSocket(s);
+                        s.on('connect', () => console.log('Socket:', s.id));
+                        s.on('connect_error', (err) => console.error('Socket erro:', err));
+                        s.on('conversationUpdate', (u) => { 
+                            setConvs(prev => { 
+                                const ex = prev.find(c => c.phone === u.phone); 
+                                if (ex) return [{ ...ex, ...u }, ...prev.filter(c => c.phone !== u.phone)]; 
+                                return [u, ...prev]; 
+                            });
+                            // Nova msg recebida de outra conversa: incrementa não lidas e toca som
+                            if (u.direction === 'received' && u.phone !== selRef.current) {
+                                setUnreadCounts(prev => ({ ...prev, [u.phone]: (prev[u.phone] || 0) + 1 }));
+                                if (notifAudio.current) {
+                                    notifAudio.current.play().catch(() => {});
+                                }
+                            }
+                        });
+                    } catch (err) {
+                        console.error('Erro socket:', err);
+                    }
+                };
+                
+                initSocket();
+                return () => { isMounted = false; if (socket) socket.close(); };
+            }, []);
+
+            const fetchAll = useCallback(async () => {
+                try {
+                    setIsLoading(true);
+                    const [c, l, t, q, cfgData] = await Promise.all([
+                        fetch('/api/conversations').then(r => r.ok ? r.json() : []), 
+                        fetch('/api/leads').then(r => r.ok ? r.json() : []), 
+                        fetch('/api/meta/templates').then(r => r.ok ? r.json() : []), 
+                        fetch('/api/quick-replies').then(r => r.ok ? r.json() : []), 
+                        fetch('/api/config').then(r => r.ok ? r.json() : {})
+                    ]);
+                    setConvs(c || []); setLeads(l || []); setTpls(t || []); setQr(q || []); setCfg(cfgData || {});
+                    setIsLoading(false);
+                } catch (e) {
+                    console.error('Erro fetchAll:', e);
+                    setError('Erro ao carregar dados');
+                    setIsLoading(false);
+                }
+            }, []);
+
+            // Refetch só de leads — sem recarregar tudo
+            const fetchLeads = useCallback(async () => {
+                try {
+                    const l = await fetch('/api/leads').then(r => r.ok ? r.json() : []);
+                    setLeads(l || []);
+                } catch (e) {
+                    console.error('Erro fetchLeads:', e);
+                }
+            }, []);
+
+            // Refetch só de config
+            const fetchConfig = useCallback(async () => {
+                try {
+                    const cfgData = await fetch('/api/config').then(r => r.ok ? r.json() : {});
+                    setCfg(cfgData || {});
+                } catch (e) {
+                    console.error('Erro fetchConfig:', e);
+                }
+            }, []);
+
+            useEffect(() => { fetchAll(); }, [fetchAll]);
+
+            if (error) {
+                return (
+                    <div className="flex h-screen items-center justify-center bg-slate-100">
+                        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
+                            <i className="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                            <h2 className="text-xl font-bold text-slate-800 mb-2">Erro</h2>
+                            <p className="text-slate-500 mb-4">{error}</p>
+                            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-purple-700 text-white rounded-lg hover:bg-purple-800">Recarregar</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (isLoading) {
+                return <LoadingScreen />;
+            }
+
+            return (
+                <ErrorBoundary>
+                    <div className="flex h-screen bg-slate-100">
+                        <div className="nav-sidebar w-20 bg-purple-900 flex flex-col items-center py-8 gap-6 z-50">
+                            <div className="nav-logo w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white text-xl font-black mb-4">P</div>
+                            <button onClick={() => setTab('chat')} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${tab === 'chat' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`}><i className="fas fa-comment-dots"></i></button>
+                            <button onClick={() => setTab('bulk')} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${tab === 'bulk' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`}><i className="fas fa-rocket"></i></button>
+                            <button onClick={() => setTab('leads')} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${tab === 'leads' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`}><i className="fas fa-users"></i></button>
+                            <button onClick={() => setTab('tags')} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${tab === 'tags' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`} title="Tags"><i className="fas fa-tags"></i></button>
+                            <button onClick={() => setTab('quick')} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${tab === 'quick' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`}><i className="fas fa-bolt"></i></button>
+                            <button onClick={() => setTab('config')} className={`nav-config-btn w-10 h-10 rounded-xl flex items-center justify-center transition-all mt-auto ${tab === 'config' ? 'active-tab-btn' : 'text-purple-300 hover:bg-white/10'}`}><i className="fas fa-cog"></i></button>
+                        </div>
+                        <div className="main-content-wrap flex-1 overflow-hidden">
+                            {tab === 'chat' && <ChatView conversations={convs} selectedPhone={sel} setSelectedPhone={handleSelectPhone} config={cfg} templates={tpls} quickReplies={qr} socket={socket} setConversations={setConvs} unreadCounts={unreadCounts} />}
+                            {tab === 'bulk' && <BulkView leads={leads} templates={tpls} config={cfg} onLeadsUpdate={fetchLeads} />}
+                            {tab === 'leads' && <LeadsView leads={leads} config={cfg} onUpd={fetchLeads} socket={socket} onChat={(p) => {
+                                // Injeta uma conversa sintética se o lead ainda não tem histórico
+                                setConvs(prev => {
+                                    if (prev.find(c => c.phone === p)) return prev;
+                                    const lead = leads.find(l => l.phone === p);
+                                    return [{ phone: p, name: lead?.name || p, lastMessage: '', timestamp: new Date(), tags: lead?.tags || [] }, ...prev];
+                                });
+                                handleSelectPhone(p);
+                            }} />}
+                            {tab === 'tags' && <TagsView config={cfg} onUpd={fetchConfig} />}
+                            {tab === 'quick' && <QuickView qr={qr} onUpd={fetchAll} />}
+                            {tab === 'config' && <ConfigView config={cfg} onUpd={fetchConfig} />}
+                        </div>
+                    </div>
+                </ErrorBoundary>
+            );
+        }
+
+        try {
+            ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        } catch (err) {
+            console.error('Erro fatal:', err);
+            document.getElementById('root').innerHTML = '<div style="padding:20px;text-align:center"><h2>Erro ao iniciar</h2><p>' + err.message + '</p><button onclick="location.reload()">Recarregar</button></div>';
+        }
+    </script>
+</body>
+</html>
